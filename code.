@@ -1,0 +1,76 @@
+#include <iostream>
+#include <string>
+#include <curl/curl.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
+#include <iomanip>
+#include <sstream>
+
+using namespace std;
+
+// Function to  get data of the Book of Mark
+string getBook(const string& url) {
+  CURL* curl = curl_easy_init();
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+
+  long responseCode;
+  curl_easy_perform(curl);
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
+  curl_easy_cleanup(curl);
+
+  if (responseCode != 200) {
+    throw runtime_error("Failed to download book: " + to_string(responseCode));
+  }
+
+  // Download the actual content
+  curl = curl_easy_init();
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
+
+  string data;
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &data);
+  curl_easy_perform(curl);
+  curl_easy_cleanup(curl);
+
+  return data;
+}
+
+// Function to generate the SHA-256 hash
+string computeHash(const string& text) {
+  unsigned char hash[SHA256_DIGEST_LENGTH];
+  EVP_MD_CTX* context = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(context, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(context, text.c_str(), text.length());
+  EVP_DigestFinal_ex(context, hash, nullptr);
+  EVP_MD_CTX_free(context);
+
+  stringstream ss;
+  for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+    ss << hex << setfill('0') << setw(2) << (int)hash[i];
+  }
+
+  return ss.str();
+}
+
+int main() {
+  // Book URL
+  const string bookUrl = "https://quod.lib.umich.edu/cgi/r/rsv/rsv-idx?type=DIV1&byte=4697892";
+
+  // Get the book text
+  string bookData;
+  try {
+    bookData = getBook(bookUrl);
+  } catch (const runtime_error& e) {
+    cerr << e.what() << endl;
+    return 1;
+  }
+
+  // Calculate the SHA-256 hash
+  string bookHash = computeHash(bookData);
+
+  // Print the hash
+  cout << "SHA-256 hash for the Book of mark Is: " << bookHash << endl;
+
+  return 0;
+}
